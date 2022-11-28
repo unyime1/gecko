@@ -16,4 +16,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "gecko_mem"
 path = "src/gecko_mem.rs"
-
