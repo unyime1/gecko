@@ -24,6 +24,7 @@ pub struct GeckoKV {
 }
 
 impl GeckoKV {
+    // Setup A GeckoKV instance.
     pub fn open(path: &Path) -> io::Result<Self> {
         let f = OpenOptions::new()
             .read(true)
@@ -31,8 +32,30 @@ impl GeckoKV {
             .create(true)
             .append(true)
             .open(path)?;
-        
-            let index = HashMap::new();
-            Ok(Self{f, index})
+
+        let index = HashMap::new();
+        Ok(GeckoKV { f, index })
+    }
+
+    // Populate index of GeckoKV.
+    pub fn load(&mut self) -> io::Result<()> {
+        let mut f = BufReader::new(&mut self.f);
+
+        loop {
+            let position = f.seek(SeekFrom::Current(0))?;
+
+            let maybe_kv = GeckoKV::process_record(&mut f);
+            let key_value = match maybe_kv {
+                Ok(kv) => kv,
+                Err(err) => match err.kind() {
+                    io::ErrorKind::UnexpectedEof => {
+                        break;
+                    }
+                    _ => return Err(err),
+                },
+            };
+            self.index.insert(key_value.key, position);
+        }
+        Ok(())
     }
 }
