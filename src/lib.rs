@@ -6,6 +6,8 @@ use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
 use std::path::Path;
 
+use byteorder::{LittleEndian, ReadBytesExt};
+use crc::crc32;
 use serde_derive::{Deserialize, Serialize};
 
 type ByteString = Vec<u8>;
@@ -57,5 +59,33 @@ impl GeckoKV {
             self.index.insert(key_value.key, position);
         }
         Ok(())
+    }
+
+    fn process_record<R: Read>(f: &mut R) -> io::Result<KeyValuePair> {
+        let saved_checksum = f.read_u32::<LittleEndian>()?;
+        let key_len = f.read_u32::<LittleEndian>()?;
+        let val_len = f.read_u32::<LittleEndian>()?;
+        let data_len = key_len + val_len;
+
+        let mut data = ByteString::with_capacity(data_len as usize);
+
+        {
+            f.by_ref().take(data_len as u64).read_to_end(&mut data)?;
+        }
+
+        debug_assert_eq!(data.len(), data_len as usize);
+
+        let checksum = crc32::checksum_ieee(&data);
+        if checksum != saved_checksum {
+            panic!(
+                "data corruption encountered ({:08x} != {:08x})",
+                checksum, saved_checksum
+            );
+        }
+
+        let value = data.split_off(key_len as usize);
+        let key = data;
+
+        Ok(KeyValuePair { key, value })
     }
 }
